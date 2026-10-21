@@ -20,5 +20,6 @@ for sk in agy-api-subagent argon-subagent; do
     fi
 done
 
+rm -rf "$REPO_ROOT/skills/argon-subagent/spend_ledger.csv" "$REPO_ROOT/skills/argon-subagent/scripts/__pycache__"
 echo "[OK] Synced live /mnt/storage scripts & skills into $REPO_ROOT"
 git -C "$REPO_ROOT" status -s
