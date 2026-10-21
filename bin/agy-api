@@ -74,7 +74,7 @@ clean_args=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --model|-m|model)
+    --model|-m)
       OVERRIDE_MODEL="$2"
       shift 2
       ;;
@@ -179,14 +179,6 @@ echo "[agy-api] Key Tier: $KEY_TIER -- Slot:$TUI_INIT_MODEL -- Thinking: $THINK_
 PATCHED_BIN="/mnt/storage/bin/agy-lite-bin"
 python3 "$AH/patch_tui_binary.py" "$AGY_BIN" "$PATCHED_BIN" "$KEY_TIER"
 
-# If bare words are passed without -p/--print, join them as a single -p prompt
-if [[ ${#clean_args[@]} -gt 0 ]]; then
-  has_p=0
-  for arg in "${clean_args[@]}"; do
-    if [[ "$arg" == "-p" || "$arg" == "--print" || "$arg" == -* ]]; then
-      has_p=1
-      break
-    fi
   done
   if [[ $has_p -eq 0 ]]; then
     joined_prompt="${clean_args[*]}"

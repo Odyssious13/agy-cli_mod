@@ -168,7 +168,7 @@ The uninstaller asks for explicit `[y/N]` confirmation, steps out of `$TARGET_RO
 
 | Command | Syntax & Examples | Description |
 | :--- | :--- | :--- |
-| **`agy-api`** | `agy-api`<br>`agy-api -m 3.5-lite -t low`<br>`agy-api -m 3.8 -t high`<br>`agy-api -m 3.5-lite Reply with OK` | Launches the API-backed CLI/TUI through `model_proxy.py`. Supports `-m` / `--model` / `model` with short aliases (`3.5-lite`, `3.1-lite`, `2.5-lite`, `3.8`, `3.6`, `3.0`, `2.5`, `3.1-pro`, `2.5-pro`, `argon`, `gemma-31b`, `gemma-26b`) and `-t` / `--thinking` (`none`, `low`, `medium`, `high`). Trailing bare words automatically run in headless print mode (`-p`). |
+| **`agy-api`** | `agy-api`<br>`agy-api -m 3.5-lite -t low`<br>`agy-api -m 3.8 -t high`<br>`agy-api -m 3.5-lite -p "Reply with OK"` | Launches the API-backed CLI/TUI through `model_proxy.py`. Supports `-m` / `--model` with short aliases (`3.5-lite`, `3.1-lite`, `2.5-lite`, `3.8`, `3.6`, `3.0`, `2.5`, `3.1-pro`, `2.5-pro`, `argon`, `gemma-31b`, `gemma-26b`), `-t` / `--thinking` (`none`, `low`, `medium`, `high`), and `-p "..."` for headless prompts. |
 | **`agy`** | `agy`<br>`agy -p "Summarize repo"` | Launches standard OAuth Antigravity CLI with isolated `HOME=$TARGET_ROOT/.agy-workspace`. |
 | **`agy-models`** | `agy-models` | Instant (`0.02s`) Bash table displaying all Free-Tier models, Google AI Studio raw limits, Pacer hard caps, current Rolling 60s RPM/TPM usage, and Today's RPD since Midnight PT (`America/Los_Angeles`). |
 | **`agy-free`** | `agy-free` | Switches `$TARGET_ROOT/.env` `GEMINI_API_KEY` to `FREE_GEMINI_API_KEY` (enables Free-Tier Rolling Pacer & Quota Guard). |

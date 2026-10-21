@@ -47,7 +47,7 @@ The base Antigravity CLI (`~/.local/bin/agy`) has four major limitations when us
 | `bin/_sd-env.sh` | `$TARGET_ROOT/bin/_sd-env.sh` | Sets isolated `HOME`, `XDG_*`, `TMPDIR`, `NPM_CONFIG_PREFIX`, and `NPM_CONFIG_CACHE` inside `$TARGET_ROOT`. |
 | `bin/_sd-quiet.sh` | `$TARGET_ROOT/bin/_sd-quiet.sh` | Prevents background agents from opening GUI windows or playing audio (`SDL_VIDEODRIVER=offscreen`, `PULSE_SERVER=unix:/nonexistent`). |
 | `bin/agy` | `$TARGET_ROOT/bin/agy` | OAuth launcher with strict `PWD` guard (`case "$PWD/" in "$TARGET_ROOT/"*)`). |
-| `bin/agy-api` | `$TARGET_ROOT/bin/agy-api` | API launcher with strict `PWD` guard, short model aliases (`-m 3.5-lite`, `-m 3.8`, `-m 3.6`, `model ...`), optional `-p`/quotes for headless prompts, proxy startup, and binary patching. |
+| `bin/agy-api` | `$TARGET_ROOT/bin/agy-api` | API launcher with strict `PWD` guard, short model aliases (`-m 3.5-lite`, `-m 3.8`, `-m 3.6`), `-p "..."` for headless prompts, proxy startup, and binary patching. |
 | `bin/agy-models` | `$TARGET_ROOT/bin/agy-models` | Instant CLI table showing Google AI Studio Free-Tier limits, Pacer Hard Caps, Rolling 60s RPM/TPM, and Today's RPD since Midnight PT (`America/Los_Angeles`). |
 | `bin/swap-key` (`agy-free`, `agy-paid`, `agy-key`) | `$TARGET_ROOT/bin/*` | Switches active `GEMINI_API_KEY` in `$TARGET_ROOT/.env` between `FREE_GEMINI_API_KEY` and `PAID_GEMINI_API_KEY`. |
 | `workspace/model_proxy.py` | `$TARGET_ROOT/.agy-api-workspace/model_proxy.py` | Local HTTP/SSE proxy handling rate pacing, spillover, token/cost logging (`usage.tsv`), in-chat `!` commands (`!models`, `!model`, `!effort`, `!agy free`, `!agy paid`), and live 15-byte status bar updates. |
