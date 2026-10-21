@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [ -f "/mnt/storage/.env" ]; then
+  set -a
+  . "/mnt/storage/.env"
+  set +a
+fi
+python3 - << 'EOF'
+import os, json, time
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+WORKSPACE = "/mnt/storage/.agy-api-workspace"
+USAGE_FILE = os.path.join(WORKSPACE, "usage.tsv")
+RATE_STATE_FILE = os.path.join(WORKSPACE, "rate_limit_state.json")
+WINDOW_SECONDS = 65.0
+
+active_key = os.environ.get("GEMINI_API_KEY", "")
+free_key = os.environ.get("FREE_GEMINI_API_KEY", "")
+paid_key = os.environ.get("PAID_GEMINI_API_KEY", "")
+tier = "FREE" if (free_key and active_key == free_key) else ("PAID" if (paid_key and active_key == paid_key) else "CUSTOM")
+
+pt_tz = ZoneInfo("America/Los_Angeles")
+now_pt = datetime.now(pt_tz)
+midnight_pt = now_pt.replace(hour=0, minute=0, second=0, microsecond=0)
+cutoff_iso = midnight_pt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+secs_left = int(86400 - (now_pt - midnight_pt).total_seconds())
+hrs, rem = divmod(max(0, secs_left), 3600)
+reset_in = f"{hrs}h {rem // 60}m"
+
+rpd_map = {}
+cost_today = 0.0
+if os.path.exists(USAGE_FILE):
+    with open(USAGE_FILE, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            p = line.rstrip("\n").split("\t")
+            if len(p) >= 7 and p[0] >= cutoff_iso:
+                rpd_map[p[2]] = rpd_map.get(p[2], 0) + 1
+                try:
+                    cost_today += float(p[6])
+                except Exception:
+                    pass
+
+now = time.time()
+hist = []
+if os.path.exists(RATE_STATE_FILE):
+    try:
+        with open(RATE_STATE_FILE, "r", encoding="utf-8") as f:
+            hist = [h for h in json.load(f) if now - h.get("ts", 0) < WINDOW_SECONDS]
+    except Exception:
+        hist = []
+
+rows = [
+    ("3.5-flash-lite", "gemini-3.5-flash-lite",         12, 190, 500,   15, 250, "$0.30/$2.50"),
+    ("3.1-flash-lite", "gemini-3.1-flash-lite-preview", 12, 190, 500,   15, 250, "$0.25/$1.50"),
+    ("2.5-flash-lite", "gemini-2.5-flash-lite",         8,  190, 20,    10, 250, "$0.10/$0.40"),
+    ("3.8-flash",      "gemini-3.8-flash",              4,  190, 20,    5,  250, "$0.75/$3.75"),
+    ("3.6-flash",      "gemini-3.6-flash",              4,  190, 20,    5,  250, "$0.30/$2.50"),
+    ("3.0-flash",      "gemini-3-flash-preview",        4,  190, 20,    5,  250, "$0.30/$2.50"),
+    ("2.5-flash",      "gemini-2.5-flash",              4,  190, 20,    5,  250, "$0.38/$1.88"),
+    ("gemma-4-31b",    "gemma-4-31b-it",                24, 12,  14400, 30, 15,  "Free/$0.00"),
+    ("gemma-4-26b",    "gemma-4-26b-a4b-it",            24, 12,  14400, 30, 15,  "Free/$0.00"),
+    ("3.1-pro",        "gemini-3.1-pro-preview",        0,  0,   0,     0,  0,   "$2.00/$10.00"),
+    ("2.5-pro",        "gemini-2.5-pro",                0,  0,   0,     0,  0,   "$1.25/$10.00"),
+    ("argon",          "gemini-4-argon",                0,  0,   0,     0,  0,   "$2.00/$10.00"),
+]
+
+print(f"=== agy-api Models & Live Quotas (Key Tier: {tier} | RPD Resets Midnight PT in {reset_in} | Today Est: ${cost_today:.4f}) ===")
+print(f"{'ALIAS':<15} {'API MODEL ID':<30} {'SAFE CAP (RAW MAX)':<26} {'ROLLING 65s NOW':<18} {'TODAY RPD (PT)':<16} {'PAID IN/OUT'}")
+print("-" * 122)
+for alias, api_id, h_r, h_t, rpd_max, r_r, r_t, paid in rows:
+    m_h = [h for h in hist if h.get("model") == api_id]
+    c_r = len(m_h)
+    c_t = sum(int(h.get("tokens", 0)) for h in m_h) // 1000
+    u_rpd = rpd_map.get(api_id, 0)
+    if rpd_max > 0:
+        cap_s = f"{h_r}/{r_r}R · {h_t}K/{r_t}K T"
+        now_s = f"{c_r}/{h_r}R · {c_t}k/{h_t}kT"
+        rpd_s = f"{u_rpd} / {rpd_max}"
+    else:
+        cap_s = "PAID KEY ONLY (0 Free)"
+        now_s = f"{c_r}R · {c_t}kT"
+        rpd_s = f"{u_rpd} (Paid)"
+    print(f"{alias:<15} {api_id:<30} {cap_s:<26} {now_s:<18} {rpd_s:<16} {paid}")
+EOF
