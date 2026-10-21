@@ -37,11 +37,13 @@ mkdir -p "$API_WS/.gemini/skills/quota-guard" "$SHARED_SKILLS" "$TARGET_ROOT/pro
 for f in "$CLONE_DIR/bin/"*; do
     fname="$(basename "$f")"
     rm -f "$BIN_DIR/$fname"
+    rm -f "$BIN_DIR/$fname"
     sed "s@/mnt/storage@$TARGET_ROOT@g" "$f" > "$BIN_DIR/$fname"
 done
 sed "s@/mnt/storage@$TARGET_ROOT@g" "$CLONE_DIR/uninstall.sh" > "$BIN_DIR/agy-uninstall"
 chmod 664 "$BIN_DIR/_sd-env.sh" "$BIN_DIR/_sd-quiet.sh" 2>/dev/null || true
 chmod 755 "$BIN_DIR/agy" "$BIN_DIR/agy-api" "$BIN_DIR/agy-free" "$BIN_DIR/agy-paid" "$BIN_DIR/agy-key" "$BIN_DIR/agy-models" "$BIN_DIR/agy-task" "$BIN_DIR/agy-uninstall" "$BIN_DIR/swap-key"
+rm -f "$TARGET_ROOT/swap-key.sh"
 rm -f "$TARGET_ROOT/swap-key.sh"
 cp -f "$BIN_DIR/swap-key" "$TARGET_ROOT/swap-key.sh"
 chmod 755 "$TARGET_ROOT/swap-key.sh"
