@@ -74,7 +74,7 @@ clean_args=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --model|-m)
+    --model|-m|model)
       OVERRIDE_MODEL="$2"
       shift 2
       ;;
@@ -106,6 +106,22 @@ for sfx in none low medium high; do
     break
   fi
 done
+
+# Normalize short model aliases (e.g. 3.5-lite, 3.8, 3.6)
+case "$OVERRIDE_MODEL" in
+  3.5-lite|3.5-flash-lite|lite) OVERRIDE_MODEL="gemini-3.5-flash-lite" ;;
+  3.1-lite|3.1-flash-lite)      OVERRIDE_MODEL="gemini-3.1-flash-lite-preview" ;;
+  2.5-lite|2.5-flash-lite)      OVERRIDE_MODEL="gemini-2.5-flash-lite" ;;
+  3.8|3.8-flash)                OVERRIDE_MODEL="gemini-3.8-flash" ;;
+  3.6|3.6-flash)                OVERRIDE_MODEL="gemini-3.6-flash" ;;
+  3.0|3.0-flash|3-flash)        OVERRIDE_MODEL="gemini-3-flash-preview" ;;
+  2.5|2.5-flash)                OVERRIDE_MODEL="gemini-2.5-flash" ;;
+  3.1-pro|pro)                  OVERRIDE_MODEL="gemini-3.1-pro-preview" ;;
+  2.5-pro)                      OVERRIDE_MODEL="gemini-2.5-pro" ;;
+  argon|4-argon)                OVERRIDE_MODEL="gemini-4-argon" ;;
+  gemma-31b|gemma-4-31b)        OVERRIDE_MODEL="gemma-4-31b-it" ;;
+  gemma-26b|gemma-4-26b)        OVERRIDE_MODEL="gemma-4-26b-a4b-it" ;;
+esac
 
 TUI_INIT_MODEL="gemini-3.7-flash-low"
 EFF_SUFFIX="${OVERRIDE_THINKING:-low}"
@@ -162,6 +178,21 @@ echo "[agy-api] Key Tier: $KEY_TIER -- Slot:$TUI_INIT_MODEL -- Thinking: $THINK_
 
 PATCHED_BIN="/mnt/storage/bin/agy-lite-bin"
 python3 "$AH/patch_tui_binary.py" "$AGY_BIN" "$PATCHED_BIN" "$KEY_TIER"
+
+# If bare words are passed without -p/--print, join them as a single -p prompt
+if [[ ${#clean_args[@]} -gt 0 ]]; then
+  has_p=0
+  for arg in "${clean_args[@]}"; do
+    if [[ "$arg" == "-p" || "$arg" == "--print" || "$arg" == -* ]]; then
+      has_p=1
+      break
+    fi
+  done
+  if [[ $has_p -eq 0 ]]; then
+    joined_prompt="${clean_args[*]}"
+    clean_args=("-p" "$joined_prompt")
+  fi
+fi
 
 set -- --dangerously-skip-permissions --model "$TUI_INIT_MODEL" "${clean_args[@]}"
 
