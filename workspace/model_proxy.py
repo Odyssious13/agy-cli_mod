@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 #!/usr/bin/env python3
 import fcntl, http.server, json, os, re, socket, socketserver
 import sys, time, urllib.request, urllib.error
@@ -278,8 +280,7 @@ def record_turn_usage(model_name: str, slot_id: str, uncached_in: int, cached_to
     global SESSION_COST
     p_in, p_cache, p_out = MODEL_PRICING.get(model_name, (0.30, 0.03, 2.50))
     turn_cost = ((uncached_in * p_in) + (cached_tok * p_cache) + (out_tok * p_out)) / 1_000_000.0
-    if not IS_FREE_TIER:
-        SESSION_COST += turn_cost
+    SESSION_COST += turn_cost
     actual_tokens = uncached_in + cached_tok + out_tok
     if actual_tokens > 0 and os.path.exists(RATE_STATE_FILE):
         try:
@@ -506,23 +507,23 @@ class RewriteHandler(http.server.BaseHTTPRequestHandler):
                 else:
                     lim_str = f'Paid Tier Pricing: ${p_in}/M in, ${p_cache}/M cache,${p_out}/M out'
                 tier_desc = f'{target_model} (Effort: {effort_label}, Key Tier: {KEY_TIER} - {lim_str})'
-                raw_json = json.dumps(payload, separators=(',', ':'))
-                raw_json = re.sub(
-                    r'The user changed setting `Model Selection`[^<]+',
-                    (
-                        f'Active Model & Tier: {tier_desc}. Always report your exact model as `{target_model}` (effort `{effort_label}`) on the `{KEY_TIER}` key tier with these exact limits/rates when asked. '
-                        + (
-                            'QUOTA GUARD (ACTIVE): You have ONLY 5 RPM and 20 RPD on this model. '
-                            'To avoid exhausting quota, NEVER make multiple sequential tool calls. '
-                            'Either (1) batch all shell checks/actions into ONE single compound bash command (`cmd1 && cmd2`), '
-                            'OR (2) for multi-step file reading/debugging, use ONE bash call to spawn a single subagent on the 500-RPD bucket: '
-                            '`agy-api -m 3.5-flash-lite -p "..."` to do all legwork and return the summary to you.\\n'
-                            if (IS_FREE_TIER and max_rpm <= 5) else '\\n'
-                        )
-                    ),
-                    raw_json,
+                qg_note = (
+                    "QUOTA GUARD (ACTIVE): You have ONLY 4 safe RPM and 20 RPD on this model. "
+                    "CRITICAL: NEVER chain multiple sequential tool calls or multiple subagents. "
+                    "Either (1) run all checks/actions in ONE single compound bash command (cmd1 && cmd2), "
+                    "OR (2) spawn AT MOST ONE subagent on flash-lite to do all legwork and return the summary to you."
+                    if (IS_FREE_TIER and max_rpm <= 5) else ""
                 )
-                body = raw_json.encode('utf-8')
+                inject_note = f"Active Model & Tier: {tier_desc}. Always report your exact model as `{target_model}` (effort `{effort_label}`) on the `{KEY_TIER}` key tier with these exact limits/rates when asked. {qg_note}\n"
+                for c_item in payload.get('contents', []):
+                    for p_item in c_item.get('parts', []):
+                        if isinstance(p_item.get('text'), str) and 'The user changed setting `Model Selection`' in p_item['text']:
+                            p_item['text'] = re.sub(
+                                r'The user changed setting `Model Selection`[^<]+',
+                                lambda _: inject_note,
+                                p_item['text'],
+                            )
+                body = json.dumps(payload, separators=(',', ':')).encode('utf-8')
             except Exception:
                 pass
 
@@ -572,13 +573,17 @@ class RewriteHandler(http.server.BaseHTTPRequestHandler):
                     self.end_headers()
                     prompt_tok, cached_tok, out_tok = 0, 0, 0
                     while line := resp.readline():
-                        if b'"usageMetadata"' in line and line.startswith(b'data:'):
+                        if b'TokenCount' in line:
                             try:
-                                chunk_obj = json.loads(line[5:].decode('utf-8', errors='ignore'))
-                                um = chunk_obj.get('usageMetadata', {})
-                                prompt_tok = int(um.get('promptTokenCount', 0))
-                                cached_tok = int(um.get('cachedContentTokenCount', 0))
-                                out_tok = int(um.get('candidatesTokenCount', 0)) + int(um.get('thoughtsTokenCount', 0))
+                                s_line = line.decode('utf-8', errors='ignore')
+                                m_p = re.search(r'"promptTokenCount"\s*:\s*(\d+)', s_line)
+                                m_c = re.search(r'"cachedContentTokenCount"\s*:\s*(\d+)', s_line)
+                                m_o = re.search(r'"candidatesTokenCount"\s*:\s*(\d+)', s_line)
+                                m_t = re.search(r'"thoughtsTokenCount"\s*:\s*(\d+)', s_line)
+                                if m_p: prompt_tok = int(m_p.group(1))
+                                if m_c: cached_tok = int(m_c.group(1))
+                                if m_o or m_t:
+                                    out_tok = (int(m_o.group(1)) if m_o else 0) + (int(m_t.group(1)) if m_t else 0)
                             except Exception:
                                 pass
                         try:

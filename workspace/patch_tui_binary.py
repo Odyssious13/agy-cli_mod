@@ -7,12 +7,6 @@ target_bin = Path(sys.argv[2])
 key_tier = sys.argv[3]
 offset_file = Path('/mnt/storage/.agy-api-workspace/statusbar_offset.txt')
 
-if not target_bin.exists() or orig_bin.stat().st_size != target_bin.stat().st_size:
-    tmp = target_bin.with_suffix(f'.tmp.{os.getpid()}')
-    shutil.copy2(orig_bin, tmp)
-    tmp.chmod(0o755)
-    tmp.replace(target_bin)
-
 data = bytearray(orig_bin.read_bytes())
 
 def patch_exact(old_bytes: bytes, new_str: str):
@@ -42,11 +36,19 @@ needle_sb = b'? for shortcuts'
 idx_sb = data.find(needle_sb)
 if idx_sb != -1:
     offset_file.write_text(str(idx_sb), encoding='utf-8')
-    init_sb = ('FREE 0/15R 0kT ' if key_tier == 'FREE' else 'PAID $0.0000 0R')[:15].ljust(15)
+    init_sb = ('FREE 0/12R 0kT ' if key_tier == 'FREE' else 'PAID $0.0000 0R')[:15].ljust(15)
     data[idx_sb:idx_sb + 15] = init_sb.encode('ascii')
 
-# Atomic rename avoids Errno 26 (Text file busy) when another agy-api is running
-tmp_bin = target_bin.with_suffix(f'.tmp.{os.getpid()}')
-tmp_bin.write_bytes(data)
-tmp_bin.chmod(0o755)
-tmp_bin.replace(target_bin)
+# Write in-place first so running TUI sees live statusbar updates via shared page cache
+try:
+    if not target_bin.exists() or target_bin.stat().st_size != len(data):
+        raise OSError("Size mismatch or missing")
+    with open(target_bin, 'r+b') as f:
+        f.seek(0)
+        f.write(data)
+        f.flush()
+except OSError:
+    tmp_bin = target_bin.with_suffix(f'.tmp.{os.getpid()}')
+    tmp_bin.write_bytes(data)
+    tmp_bin.chmod(0o755)
+    tmp_bin.replace(target_bin)
