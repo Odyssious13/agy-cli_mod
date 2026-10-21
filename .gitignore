@@ -1,0 +1,11 @@
+.env
+*.log
+*.tsv
+*.db*
+*.tmp*
+*.old
+agy-lite-bin*
+rate_limit_state.json
+statusbar_offset.txt
+__pycache__/
+spend_ledger.csv

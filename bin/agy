@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Launch the Antigravity CLI with its state on /mnt/storage (workspace storage rule).
+# agy has no config-dir variable and always writes to $HOME/.gemini, so it gets a
+# private HOME on the drive. Same binary as plain `agy`.
+set -euo pipefail
+
+REAL_HOME="$HOME"
+AGY_BIN="$(PATH="$REAL_HOME/.local/bin:$PATH" command -v agy)"
+AH=/mnt/storage/.agy-workspace
+
+# shellcheck source=/dev/null
+. "$(dirname "$(readlink -f "$0")")/_sd-env.sh"
+sd_env "$AH"
+. "$(dirname "$(readlink -f "$0")")/_sd-quiet.sh"
+mkdir -p "$AH/.gemini"
+
+# The drive's configuration is independent of ~/.gemini (owner's decision, 2026-10-15):
+# a missing item is seeded once as a real copy, never a symlink. Credentials and history
+# stay separate: sign in once inside this launcher.
+for item in GEMINI.md settings.json skills config bin; do
+  if [ -e "$REAL_HOME/.gemini/$item" ] && [ ! -e "$AH/.gemini/$item" ] && [ ! -L "$AH/.gemini/$item" ]; then
+    cp -rL "$REAL_HOME/.gemini/$item" "$AH/.gemini/$item"
+  fi
+done
+
+# Tools agy runs (git, ssh, gh) still need the real identity and keys.
+for item in .gitconfig .ssh .config/gh; do
+  if [ -e "$REAL_HOME/$item" ] && [ ! -e "$AH/$item" ] && [ ! -L "$AH/$item" ]; then
+    mkdir -p "$(dirname "$AH/$item")"
+    ln -s "$REAL_HOME/$item" "$AH/$item"
+  fi
+done
+
+export UV_CACHE_DIR=/mnt/storage/.claude-workspace/cache/uv
+export PIP_CACHE_DIR=/mnt/storage/.claude-workspace/cache/pip
+export npm_config_cache=/mnt/storage/.claude-workspace/cache/npm
+# uv and other user tools live in the real ~/.local/bin; keep them reachable.
+export PATH="$REAL_HOME/.local/bin:$PATH"
+
+case "$PWD/" in /mnt/storage/*) ;; *) cd /mnt/storage ;; esac
+# Default to bypass mode on the drive (the user's choice, 2026-10-04).
+case " $* " in *" --dangerously-skip-permissions "*) ;; *) set -- --dangerously-skip-permissions "$@" ;; esac
+exec "$AGY_BIN" "$@"

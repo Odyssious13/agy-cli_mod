@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -e
+source /mnt/storage/.env
+if [ "$GEMINI_API_KEY" = "$FREE_GEMINI_API_KEY" ]; then
+  echo "[agy-key] Active Tier: FREE (5 RPM / 240k TPM guard active)"
+elif [ "$GEMINI_API_KEY" = "$PAID_GEMINI_API_KEY" ]; then
+  echo "[agy-key] Active Tier: PAID (unthrottled)"
+else
+  echo "[agy-key] Active Tier: CUSTOM"
+fi
+if [ -f /mnt/storage/.agy-api-workspace/usage.tsv ]; then
+  echo "--- Last 5 agy-api calls ---"
+  tail -n 5 /mnt/storage/.agy-api-workspace/usage.tsv
+fi

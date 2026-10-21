@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REAL_HOME="${REAL_HOME:-$HOME}"
+AGY_BIN="$(PATH="$REAL_HOME/.local/bin:$PATH" command -v agy)"
+AH=/mnt/storage/.agy-api-workspace
+
+if [ -f "/mnt/storage/.env" ]; then
+  set -a
+  . "/mnt/storage/.env"
+  set +a
+fi
+
+if [ -z "${GEMINI_API_KEY:-}" ]; then
+  echo "Error: GEMINI_API_KEY not found in /mnt/storage/.env" >&2
+  exit 1
+fi
+
+KEY_TIER="CUSTOM"
+if [ -n "${FREE_GEMINI_API_KEY:-}" ] && [ "${GEMINI_API_KEY:-}" = "${FREE_GEMINI_API_KEY:-}" ]; then
+  KEY_TIER="FREE"
+elif [ -n "${PAID_GEMINI_API_KEY:-}" ] && [ "${GEMINI_API_KEY:-}" = "${PAID_GEMINI_API_KEY:-}" ]; then
+  KEY_TIER="PAID"
+fi
+
+DIR="$(dirname "$(readlink -f "$0")")"
+. "$DIR/_sd-env.sh"
+sd_env "$AH"
+. "$DIR/_sd-quiet.sh"
+
+mkdir -p "$AH/.gemini/antigravity-cli"
+cat << 'JSON' > "$AH/.gemini/antigravity-cli/settings.json"
+{
+  "modelProvider": "gemini",
+  "defaultModelId": "gemini-3.7-flash-low"
+}
+JSON
+
+SRC_GEMINI=/mnt/storage/.agy-workspace/.gemini
+for item in GEMINI.md config bin; do
+  if [ -e "$SRC_GEMINI/$item" ] && [ ! -e "$AH/.gemini/$item" ]; then
+    cp -rL "$SRC_GEMINI/$item" "$AH/.gemini/$item"
+  fi
+done
+mkdir -p "$AH/.gemini/skills"
+for sk in argon-subagent agy-api-subagent; do
+  if [ ! -L "$AH/.gemini/skills/$sk" ]; then
+    rm -rf "$AH/.gemini/skills/$sk"
+    ln -s "/mnt/storage/.gemini/antigravity/skills/$sk" "$AH/.gemini/skills/$sk"
+  fi
+done
+
+for item in .gitconfig .ssh .config/gh; do
+  if [ -e "$REAL_HOME/$item" ] && [ ! -e "$AH/$item" ]; then
+    mkdir -p "$(dirname "$AH/$item")"
+    ln -s "$REAL_HOME/$item" "$AH/$item"
+  fi
+done
+
+export GEMINI_API_KEY
+export UV_CACHE_DIR=/mnt/storage/.claude-workspace/cache/uv
+export PIP_CACHE_DIR=/mnt/storage/.claude-workspace/cache/pip
+export npm_config_cache=/mnt/storage/.claude-workspace/cache/npm
+export PATH="$REAL_HOME/.local/bin:$PATH"
+
+case "$PWD/" in /mnt/storage/*) ;; *) cd /mnt/storage ;; esac
+
+OVERRIDE_MODEL=""
+OVERRIDE_THINKING=""
+clean_args=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --model|-m)
+      OVERRIDE_MODEL="$2"
+      shift 2
+      ;;
+    --model=*)
+      OVERRIDE_MODEL="${1#*=}"
+      shift
+      ;;
+    --thinking|-t)
+      OVERRIDE_THINKING="$2"
+      shift 2
+      ;;
+    --thinking=*)
+      OVERRIDE_THINKING="${1#*=}"
+      shift
+      ;;
+    *)
+      clean_args+=("$1")
+      shift
+      ;;
+  esac
+done
+
+for sfx in none low medium high; do
+  if [[ "$OVERRIDE_MODEL" == *"-$sfx" ]]; then
+    OVERRIDE_MODEL="${OVERRIDE_MODEL%-$sfx}"
+    if [ -z "$OVERRIDE_THINKING" ]; then
+      OVERRIDE_THINKING="$sfx"
+    fi
+    break
+  fi
+done
+
+TUI_INIT_MODEL="gemini-3.7-flash-low"
+EFF_SUFFIX="${OVERRIDE_THINKING:-low}"
+case "$EFF_SUFFIX" in low|medium|high) ;; *) EFF_SUFFIX="low" ;; esac
+
+case "$OVERRIDE_MODEL" in
+  ""|gemini-3.5-flash-lite|gemini-3.5-flash)
+    TUI_INIT_MODEL="gemini-3.7-flash-${EFF_SUFFIX}"
+    OVERRIDE_MODEL=""
+    ;;
+  gemini-2.5-flash-lite|gemini-3.7-flash)
+    TUI_INIT_MODEL="gemini-3.7-flash-${EFF_SUFFIX}"
+    OVERRIDE_MODEL=""
+    ;;
+  gemini-3.8-flash)
+    TUI_INIT_MODEL="gemini-3.8-flash-${EFF_SUFFIX}"
+    OVERRIDE_MODEL=""
+    ;;
+  gemini-3.6-flash)
+    TUI_INIT_MODEL="gemini-3.6-flash-${EFF_SUFFIX}"
+    OVERRIDE_MODEL=""
+    ;;
+  gemini-3.1-flash-lite*)
+    TUI_INIT_MODEL="gemini-3.1-flash-lite"
+    OVERRIDE_MODEL=""
+    ;;
+  gemini-4-argon*)
+    TUI_INIT_MODEL="gemini-4-argon-${EFF_SUFFIX}"
+    OVERRIDE_MODEL=""
+    ;;
+  gemini-3.1-pro*)
+    TUI_INIT_MODEL="gemini-3.1-pro-${EFF_SUFFIX}"
+    OVERRIDE_MODEL=""
+    ;;
+  *)
+    TUI_INIT_MODEL="gemini-3.7-flash-${EFF_SUFFIX}"
+    ;;
+esac
+
+PROXY_PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
+python3 "$AH/model_proxy.py" "$PROXY_PORT" "$OVERRIDE_MODEL" "$OVERRIDE_THINKING" &
+PROXY_PID=$!
+cleanup_proxy() {
+  if [ -n "${PROXY_PID:-}" ]; then
+    kill "$PROXY_PID" 2>/dev/null || true
+  fi
+}
+trap cleanup_proxy EXIT
+sleep 0.15
+export GOOGLE_GEMINI_BASE_URL="http://127.0.0.1:${PROXY_PORT}"
+
+echo "[agy-api] Key Tier: $KEY_TIER -- Slot: $TUI_INIT_MODEL -- Proxy: 127.0.0.1:$PROXY_PORT" >&2
+echo "[agy-api] Tip: Use /model and /effort inside the TUI to switch models & thinking levels live!" >&2
+
+PATCHED_BIN="/mnt/storage/bin/agy-lite-bin"
+python3 "$AH/patch_tui_binary.py" "$AGY_BIN" "$PATCHED_BIN" "$KEY_TIER"
+
+set -- --dangerously-skip-permissions --model "$TUI_INIT_MODEL" "${clean_args[@]}"
+
+EXIT_CODE=0
+"$PATCHED_BIN" "$@" || EXIT_CODE=$?
+
+for arg in "${clean_args[@]}"; do
+  if [[ "$arg" == "-p" || "$arg" == "--print" ]]; then
+    if [ -f "$AH/usage.tsv" ]; then
+      last_line=$(tail -n 1 "$AH/usage.tsv")
+      echo "[agy-api] Logged Usage: $last_line" >&2
+    fi
+    break
+  fi
+done
+
+exit $EXIT_CODE

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Run one agy (Gemini) task headless in its own folder and log it like `delegate`.
+# Usage: agy-task <profile> <task_dir> [model]   (prompt is read from <task_dir>/PROMPT.md)
+# agy -p has no custom-agent loading, so the profile's system_prompt (JSON in
+# .agy-workspace/.gemini/config/agents/<profile>.json) is prepended to the prompt.
+set -u
+profile="$1"; dir="$2"; model="${3:-gemini-3.8-flash-high}"
+pf=/mnt/storage/.agy-workspace/.gemini/config/agents/$profile.json
+cd "$dir" || exit 2
+sys=""; [ -f "$pf" ] && sys="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["system_prompt"])' "$pf")"
+start=$(date +%s)
+timeout 1800 /mnt/storage/bin/agy -p "ROLE: ${sys}
+
+TASK:
+$(cat PROMPT.md)" --model "$model" > agy.out 2>&1
+rc=$?
+printf '%s\tagy-task:%s\trc=%s\t%ss\t%s\n' "$(date -Is)" "$profile" "$rc" "$(( $(date +%s) - start ))" "$dir" >> "$HOME/.claude/delegate.log"
+tail -40 agy.out
+exit $rc

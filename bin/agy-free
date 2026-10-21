@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+/mnt/storage/swap-key.sh free

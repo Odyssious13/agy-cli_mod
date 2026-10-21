@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+
+ENV_FILE="/mnt/storage/.env"
+MODE=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+
+if [[ ! -f "$ENV_FILE" ]]; then
+    echo "Error: $ENV_FILE not found."
+    return 1 2>/dev/null || exit 1
+fi
+
+if [[ "$MODE" == "free" ]]; then
+    TARGET_VAR="FREE_GEMINI_API_KEY"
+    LABEL="FREE_GEMINI_API_KEY (Free Tier)"
+elif [[ "$MODE" == "paid" ]]; then
+    TARGET_VAR="PAID_GEMINI_API_KEY"
+    LABEL="PAID_GEMINI_API_KEY (Paid Tier)"
+else
+    # Check current status if no valid argument is passed
+    CURRENT_VAL=$(grep -E "^GEMINI_API_KEY=" "$ENV_FILE" | cut -d'=' -f2-)
+    FREE_VAL=$(grep -E "^FREE_GEMINI_API_KEY=" "$ENV_FILE" | cut -d'=' -f2-)
+    PAID_VAL=$(grep -E "^PAID_GEMINI_API_KEY=" "$ENV_FILE" | cut -d'=' -f2-)
+
+    echo "Usage: source ./swap-key.sh [free|paid]"
+    if [[ -n "$CURRENT_VAL" && "$CURRENT_VAL" == "$FREE_VAL" ]]; then
+        echo "Currently active in .env: FREE_GEMINI_API_KEY"
+    elif [[ -n "$CURRENT_VAL" && "$CURRENT_VAL" == "$PAID_VAL" ]]; then
+        echo "Currently active in .env: PAID_GEMINI_API_KEY"
+    else
+        echo "Currently active in .env: Custom / Unmatched Key"
+    fi
+    return 1 2>/dev/null || exit 1
+fi
+
+# Extract the target key value safely
+NEW_KEY=$(grep -E "^${TARGET_VAR}=" "$ENV_FILE" | cut -d'=' -f2-)
+
+if [[ -z "$NEW_KEY" ]]; then
+    echo "Error: $TARGET_VAR is empty or missing in $ENV_FILE"
+    return 1 2>/dev/null || exit 1
+fi
+
+# Update GEMINI_API_KEY in-place using awk to avoid sed delimiter collisions with special characters
+awk -v new_key="$NEW_KEY" '
+  /^GEMINI_API_KEY=/ { print "GEMINI_API_KEY=" new_key; next }
+  { print }
+' "$ENV_FILE" > "${ENV_FILE}.tmp" && mv "${ENV_FILE}.tmp" "$ENV_FILE"
+
+# Export all variables from .env into the current shell session
+set -a
+source "$ENV_FILE"
+set +a
+
+# Print confirmation with masked key preview
+MASKED_KEY="${NEW_KEY:0:4}...${NEW_KEY: -4}"
+echo "Active key switched to: $LABEL [$MASKED_KEY]"
