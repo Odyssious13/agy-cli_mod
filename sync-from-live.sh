@@ -2,7 +2,7 @@
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-for bf in _sd-env.sh _sd-quiet.sh agy agy-api agy-free agy-paid agy-key agy-models agy-task swap-key; do
+for bf in _sd-env.sh _sd-quiet.sh agy agy-api agy-free agy-paid agy-key agy-models agy-task agy-uninstall swap-key; do
     [[ -f "/mnt/storage/bin/$bf" ]] && cp -f "/mnt/storage/bin/$bf" "$REPO_ROOT/bin/$bf"
 done
 

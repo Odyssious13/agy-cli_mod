@@ -1,75 +1,77 @@
 #!/usr/bin/env bash
 set -euo pipefail
-if [ -f "/mnt/storage/.env" ]; then
+ALLOWED_ROOT="/mnt/storage"
+case "$PWD/" in
+  "$ALLOWED_ROOT/"*) ;;
+  *) echo "[agy-models] Blocked: only accessible inside $ALLOWED_ROOT" >&2; exit 1 ;;
+esac
+if [ -f "$ALLOWED_ROOT/.env" ]; then
   set -a
-  . "/mnt/storage/.env"
+  . "$ALLOWED_ROOT/.env"
   set +a
 fi
 python3 - << 'EOF'
 import os, json, time
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-
-WORKSPACE = "/mnt/storage/.agy-api-workspace"
-USAGE_FILE = os.path.join(WORKSPACE, "usage.tsv")
-RATE_STATE_FILE = os.path.join(WORKSPACE, "rate_limit_state.json")
-WINDOW_SECONDS = 65.0
-
-active_key = os.environ.get("GEMINI_API_KEY", "")
-free_key = os.environ.get("FREE_GEMINI_API_KEY", "")
-paid_key = os.environ.get("PAID_GEMINI_API_KEY", "")
-tier = "FREE" if (free_key and active_key == free_key) else ("PAID" if (paid_key and active_key == paid_key) else "CUSTOM")
-
-pt_tz = ZoneInfo("America/Los_Angeles")
-now_pt = datetime.now(pt_tz)
-midnight_pt = now_pt.replace(hour=0, minute=0, second=0, microsecond=0)
-cutoff_iso = midnight_pt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-secs_left = int(86400 - (now_pt - midnight_pt).total_seconds())
-hrs, rem = divmod(max(0, secs_left), 3600)
+WS = "/mnt/storage/.agy-api-workspace"
+USAGE_FILE = os.path.join(WS, "usage.tsv")
+RATE_FILE = os.path.join(WS, "rate_limit_state.json")
+WIN = 65.0
+ak = os.environ.get("GEMINI_API_KEY", "")
+fk = os.environ.get("FREE_GEMINI_API_KEY", "")
+pk = os.environ.get("PAID_GEMINI_API_KEY", "")
+tier = "FREE" if (fk and ak == fk) else ("PAID" if (pk and ak == pk) else "CUSTOM")
+pt = ZoneInfo("America/Los_Angeles")
+now_pt = datetime.now(pt)
+mid_pt = now_pt.replace(hour=0, minute=0, second=0, microsecond=0)
+cut = mid_pt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+secs = int(86400 - (now_pt - mid_pt).total_seconds())
+hrs, rem = divmod(max(0, secs), 3600)
 reset_in = f"{hrs}h {rem // 60}m"
-
-rpd_map = {}
+rpd = {}
 if os.path.exists(USAGE_FILE):
     with open(USAGE_FILE, "r", encoding="utf-8", errors="ignore") as f:
         for line in f:
             p = line.rstrip("\n").split("\t")
-            if len(p) >= 7 and p[0] >= cutoff_iso:
+            if len(p) >= 7 and p[0] >= cut:
                 if tier == "FREE" and p[1].startswith("PAID-"):
                     continue
-                rpd_map[p[2]] = rpd_map.get(p[2], 0) + 1
-
+                rpd[p[2]] = rpd.get(p[2], 0) + 1
 now = time.time()
 hist = []
-if os.path.exists(RATE_STATE_FILE):
+if os.path.exists(RATE_FILE):
     try:
-        with open(RATE_STATE_FILE, "r", encoding="utf-8") as f:
-            hist = [h for h in json.load(f) if now - h.get("ts", 0) < WINDOW_SECONDS and not h.get("penalty")]
+        with open(RATE_FILE, "r", encoding="utf-8") as f:
+            hist = [
+                h for h in json.load(f)
+                if now - h.get("ts", 0) < WIN and not h.get("penalty")
+            ]
     except Exception:
         hist = []
-
 rows = [
-    ("3.5-flash-lite", "gemini-3.5-flash-lite",         15, 250, 500,   10, 175),
-    ("3.1-flash-lite", "gemini-3.1-flash-lite-preview", 15, 250, 500,   10, 175),
-    ("2.5-flash-lite", "gemini-2.5-flash-lite",         10, 250, 20,    7,  175),
-    ("3.8-flash",      "gemini-3.8-flash",              5,  250, 20,    3,  175),
-    ("3.6-flash",      "gemini-3.6-flash",              5,  250, 20,    3,  175),
-    ("3.0-flash",      "gemini-3-flash-preview",        5,  250, 20,    3,  175),
-    ("2.5-flash",      "gemini-2.5-flash",              5,  250, 20,    3,  175),
-    ("gemma-4-31b",    "gemma-4-31b-it",                30, 16,  14400, 20, 12),
-    ("gemma-4-26b",    "gemma-4-26b-a4b-it",            30, 16,  14400, 20, 12),
+    ("3.5-flash-lite", "gemini-3.5-flash-lite", 15, 250, 500, 10, 175),
+    ("3.1-flash-lite", "gemini-3.1-flash-lite-preview", 15, 250, 500, 10, 175),
+    ("2.5-flash-lite", "gemini-2.5-flash-lite", 10, 250, 20, 7, 175),
+    ("3.8-flash", "gemini-3.8-flash", 5, 250, 20, 3, 175),
+    ("3.6-flash", "gemini-3.6-flash", 5, 250, 20, 3, 175),
+    ("3.0-flash", "gemini-3-flash-preview", 5, 250, 20, 3, 175),
+    ("2.5-flash", "gemini-2.5-flash", 5, 250, 20, 3, 175),
+    ("gemma-4-31b", "gemma-4-31b-it", 30, 16, 14400, 20, 12),
+    ("gemma-4-26b", "gemma-4-26b-a4b-it", 30, 16, 14400, 20, 12),
 ]
-
-print(f"=== agy-api Free-Tier Models & AI Studio Quotas (Key: {tier} | RPD Resets Midnight PT in {reset_in}) ===")
-print(f"{'ALIAS':<16} {'API MODEL ID':<30} {'AI STUDIO FREE QUOTA':<28} {'PACER HARD CAP':<18} {'ROLLING 60s NOW':<20} {'TODAY RPD (PT)'}")
+print(f"=== agy-api Free-Tier Models & AI Studio Quotas (Key: {tier} - Resets Midnight PT in {reset_in}) ===")
+hdr = f"{'ALIAS':<16} {'API MODEL ID':<30} {'AI STUDIO FREE QUOTA':<28} {'PACER HARD CAP':<18} {'ROLLING 60s NOW':<20} {'TODAY RPD (PT)'}"
+print(hdr)
 print("-" * 128)
-for alias, api_id, r_rpm, r_tpm, rpd_max, h_rpm, h_tpm in rows:
-    m_h = [h for h in hist if h.get("model") == api_id]
-    c_r = len(m_h)
-    c_t = sum(int(h.get("tokens", 0)) for h in m_h) / 1000.0
-    u_rpd = rpd_map.get(api_id, 0)
-    quota_s = f"{r_rpm} RPM · {r_tpm}K TPM · {rpd_max} RPD"
-    cap_s   = f"{h_rpm} RPM / {h_tpm}K TPM"
-    now_s   = f"{c_r}/{r_rpm} RPM · {c_t:.1f}K/{r_tpm}K"
-    rpd_s   = f"{u_rpd} / {rpd_max}"
-    print(f"{alias:<16} {api_id:<30} {quota_s:<28} {cap_s:<18} {now_s:<20} {rpd_s}")
+for alias, api_id, rr, rt, rpd_m, hr, ht in rows:
+    mh = [h for h in hist if h.get("model") == api_id]
+    cr = len(mh)
+    ct = sum(int(h.get("tokens", 0)) for h in mh) / 1000.0
+    ur = rpd.get(api_id, 0)
+    qs = f"{rr} RPM · {rt}K TPM · {rpd_m} RPD"
+    cs = f"{hr} RPM / {ht}K TPM"
+    ns = f"{cr}/{rr} RPM · {ct:.1f}K/{rt}K"
+    ds = f"{ur} / {rpd_m}"
+    print(f"{alias:<16} {api_id:<30} {qs:<28} {cs:<18} {ns:<20} {ds}")
 EOF

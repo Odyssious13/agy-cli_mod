@@ -63,7 +63,10 @@ export PIP_CACHE_DIR=/mnt/storage/.claude-workspace/cache/pip
 export npm_config_cache=/mnt/storage/.claude-workspace/cache/npm
 export PATH="$REAL_HOME/.local/bin:$PATH"
 
-case "$PWD/" in /mnt/storage/*) ;; *) cd /mnt/storage ;; esac
+case "$PWD/" in
+  /mnt/storage/*) ;;
+  *) echo "[agy] Blocked: commands and history are restricted to /mnt/storage" >&2; exit 1 ;;
+esac
 
 OVERRIDE_MODEL=""
 OVERRIDE_THINKING=""

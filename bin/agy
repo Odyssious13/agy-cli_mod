@@ -37,7 +37,10 @@ export npm_config_cache=/mnt/storage/.claude-workspace/cache/npm
 # uv and other user tools live in the real ~/.local/bin; keep them reachable.
 export PATH="$REAL_HOME/.local/bin:$PATH"
 
-case "$PWD/" in /mnt/storage/*) ;; *) cd /mnt/storage ;; esac
+case "$PWD/" in
+  /mnt/storage/*) ;;
+  *) echo "[agy] Blocked: commands and history are restricted to /mnt/storage" >&2; exit 1 ;;
+esac
 # Default to bypass mode on the drive (the user's choice, 2026-10-04).
 case " $* " in *" --dangerously-skip-permissions "*) ;; *) set -- --dangerously-skip-permissions "$@" ;; esac
 exec "$AGY_BIN" "$@"

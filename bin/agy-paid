@@ -1,2 +1,3 @@
 #!/usr/bin/env bash
+case "$PWD/" in /mnt/storage/*) ;; *) echo "[agy-paid] Blocked: restricted to /mnt/storage" >&2; exit 1 ;; esac
 /mnt/storage/swap-key.sh paid
