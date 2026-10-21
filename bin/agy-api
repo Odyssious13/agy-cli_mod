@@ -174,31 +174,13 @@ sleep 0.15
 export GOOGLE_GEMINI_BASE_URL="http://127.0.0.1:${PROXY_PORT}"
 
 THINK_DISPLAY="${OVERRIDE_THINKING:-0-think}"
-echo "[agy-api] Key Tier: $KEY_TIER -- Slot:$TUI_INIT_MODEL -- Thinking: $THINK_DISPLAY -- Proxy: 127.0.0.1:$PROXY_PORT" >&2
+echo "[agy-api] Key Tier: $KEY_TIER -- Slot: $TUI_INIT_MODEL -- Thinking: $THINK_DISPLAY -- Proxy: 127.0.0.1:$PROXY_PORT" >&2
 
-PATCHED_BIN="/mnt/storage/bin/agy-lite-bin"
-python3 "$AH/patch_tui_binary.py" "$AGY_BIN" "$PATCHED_BIN" "$KEY_TIER"
-
-  done
-  if [[ $has_p -eq 0 ]]; then
-    joined_prompt="${clean_args[*]}"
-    clean_args=("-p" "$joined_prompt")
-  fi
+# If a single positional prompt string is given without -p, prepend -p automatically
+if [[ ${#clean_args[@]} -eq 1 && "${clean_args[0]}" != -* && "${clean_args[0]}" != agy* ]]; then
+  clean_args=("-p" "${clean_args[0]}")
 fi
 
 set -- --dangerously-skip-permissions --model "$TUI_INIT_MODEL" "${clean_args[@]}"
 
-EXIT_CODE=0
-"$PATCHED_BIN" "$@" || EXIT_CODE=$?
-
-for arg in "${clean_args[@]}"; do
-  if [[ "$arg" == "-p" || "$arg" == "--print" ]]; then
-    if [ -f "$AH/usage.tsv" ]; then
-      last_line=$(tail -n 1 "$AH/usage.tsv")
-      echo "[agy-api] Logged Usage: $last_line" >&2
-    fi
-    break
-  fi
-done
-
-exit $EXIT_CODE
+"$PATCHED_AGY" "$@"
