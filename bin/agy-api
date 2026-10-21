@@ -154,8 +154,8 @@ trap cleanup_proxy EXIT
 sleep 0.15
 export GOOGLE_GEMINI_BASE_URL="http://127.0.0.1:${PROXY_PORT}"
 
-echo "[agy-api] Key Tier: $KEY_TIER -- Slot: $TUI_INIT_MODEL -- Proxy: 127.0.0.1:$PROXY_PORT" >&2
-echo "[agy-api] Tip: Use /model and /effort inside the TUI to switch models & thinking levels live!" >&2
+THINK_DISPLAY="${OVERRIDE_THINKING:-0-think}"
+echo "[agy-api] Key Tier: $KEY_TIER -- Slot:$TUI_INIT_MODEL -- Thinking: $THINK_DISPLAY -- Proxy: 127.0.0.1:$PROXY_PORT" >&2
 
 PATCHED_BIN="/mnt/storage/bin/agy-lite-bin"
 python3 "$AH/patch_tui_binary.py" "$AGY_BIN" "$PATCHED_BIN" "$KEY_TIER"
