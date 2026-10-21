@@ -183,4 +183,4 @@ fi
 
 set -- --dangerously-skip-permissions --model "$TUI_INIT_MODEL" "${clean_args[@]}"
 
-"$PATCHED_AGY" "$@"
+"/mnt/storage/bin/agy-lite-bin" "$@"
